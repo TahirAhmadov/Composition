@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+		<AssemblyName>TA.Util.CompositionTypes</AssemblyName>
+		<Authors>TA</Authors>
+		<Company>TA</Company>
+		<Version>1.0.0.0</Version>
+		<Description>Utility</Description>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	</PropertyGroup>
+
+</Project>
