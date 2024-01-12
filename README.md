@@ -104,6 +104,8 @@ bool b = p3.Equals(p2); // same as p3.Point2D.Equals(p2)
 p2 = p3.Add(p2); // same as p3.Point2D.Add(p2); now p2.X = 2, p2.Y = 4
 object p3Boxed = p3;
 var p2Equatable = (IEquatable<Point2D>)p3Boxed; // works - because we "lifted" the interfaces
+var p2Composition = (IPoint2DComposition)p3Boxed; // this interface is implemented, allowing us to invoke Point2D members
+var p2Composition2 = (IComposedOf<Point2D>)p3Boxed; // if [CompositionPart] is not added to Point2D, then this generic interface can be used
 ```
 
 Due to the limitation on generic arguments being saved as attribute parameters, an overload is available - `[ComposedOf(Type, string)]`:
