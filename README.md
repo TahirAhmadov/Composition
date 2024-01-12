@@ -15,8 +15,8 @@ Add the following to your SDK-style project file:
 Keep in mind that since this is `ISourceGenerator`-based, VS performance may be negatively impacted if there are many projects; it's highly not recommended to apply this using `Directory.Build.props` or any other similar mechanism; 
 it should only be added to the projects where it's needed.
 
-https://www.nuget.org/packages/TA.Util.CompositionTypes/1.0.1
-https://www.nuget.org/packages/TA.Util.Composition/1.0.0
+- https://www.nuget.org/packages/TA.Util.CompositionTypes/1.0.1
+- https://www.nuget.org/packages/TA.Util.Composition/1.0.0
 
 ## Usage
 
