@@ -7,8 +7,8 @@ This source generator library aims to introduce a limited version of "multiple i
 Add the following to your SDK-style project file:
 ```xml
 	<ItemGroup>
-		<PackageReference Include="TA.Util.Composition" Version="1.0.0" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-		<PackageReference Include="TA.Util.CompositionTypes" Version="1.0.0" />
+		<PackageReference Include="TA.Util.Composition" Version="1.1.0" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+		<PackageReference Include="TA.Util.CompositionTypes" Version="1.1.0" />
 	</ItemGroup>
 ```
 
