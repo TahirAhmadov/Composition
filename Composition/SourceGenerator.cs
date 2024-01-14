@@ -50,12 +50,19 @@ namespace TA.Util.Composition
 				}
 
 				var compositionBases = new List<CompositionBase>();
-				bool isPart = false;
+				List<TypeSyntax>? partInterfaceTypes = null;
 				foreach (var attribute in context.typeDeclaration.AttributeLists.SelectMany(als => als.Attributes))
 				{
 					if (attribute.Name.GetText().ToString() == "CompositionPart" || attribute.Name.GetText().ToString() == "CompositionPartAttribute")
 					{
-						isPart = true;
+						partInterfaceTypes = new List<TypeSyntax>();
+						if (attribute.ArgumentList != null)
+						{
+							foreach (var argument in attribute.ArgumentList.Arguments)
+							{
+								partInterfaceTypes.Add(((TypeOfExpressionSyntax)argument.Expression).Type);
+							}
+						}
 						continue;
 					}
 
@@ -68,9 +75,9 @@ namespace TA.Util.Composition
 
 					compositionBases.Add(compositionBase);
 				}
-				if (compositionBases.Count > 0 || isPart)
+				if (compositionBases.Count > 0 || partInterfaceTypes != null)
 				{
-					TypeDeclaration_Create(context.context, context.typeDeclaration, GetTypePrefixes(), compositionBases, isPart);
+					TypeDeclaration_Create(context.context, context.typeDeclaration, GetTypePrefixes(), compositionBases, partInterfaceTypes);
 				}
 			}
 			catch (Exception ex)
@@ -78,7 +85,7 @@ namespace TA.Util.Composition
 				context.context.ReportDiagnostic(Diagnostic.Create(
 					new DiagnosticDescriptor("TAC0001", "Failed to generate composition", "{0}", "TA.Composition", DiagnosticSeverity.Error, true),
 					null,
-					ex.Message
+					ex.ToString()
 				));
 			}
 		}
@@ -126,7 +133,7 @@ namespace TA.Util.Composition
 				var attributes = typeSymbol.GetAttributes();
 				foreach (var attribute in attributes)
 				{
-					if (attribute.AttributeClass?.Name != "ComposedOf" && attribute.AttributeClass?.Name != "ComposedOfAttribute")
+					if (attribute.AttributeClass?.Name != "ComposedOfAttribute")
 						continue;
 					TypeSyntax nextBaseTypeSyntax;
 					var nextBaseTypeSymbol = (INamedTypeSymbol)attribute.ConstructorArguments[0].Value!;
@@ -254,13 +261,13 @@ namespace TA.Util.Composition
 			}
 			return new TypePrefixes(prefixes, sourcePrefix, sourceSuffix, filePrefix, namePrefix);
 		}
-		static void TypeDeclaration_Create(GeneratorExecutionContext context, TypeDeclarationSyntax typeDeclaration, TypePrefixes typePrefixes, List<CompositionBase> compositionBases, bool isPart)
+		static void TypeDeclaration_Create(GeneratorExecutionContext context, TypeDeclarationSyntax typeDeclaration, TypePrefixes typePrefixes, List<CompositionBase> compositionBases, List<TypeSyntax>? partInterfaceTypes)
 		{
 			string typeNameAndGenerics = typeDeclaration.Identifier.Text + typeDeclaration.TypeParameterList?.ToFullString().Trim();
 			var sb = new StringBuilder();
 
 			sb.AppendLine("#nullable enable");
-			TypeDeclaration_Create_Usings(typeDeclaration, compositionBases, isPart, sb);
+			TypeDeclaration_Create_Usings(typeDeclaration, compositionBases, partInterfaceTypes, sb);
 
 			sb.AppendLine();
 			sb.Append(typePrefixes.SourcePrefix);
@@ -280,20 +287,20 @@ namespace TA.Util.Composition
 				sb.AppendLine(" }");
 			}
 
-			if (isPart)
+			if (partInterfaceTypes != null)
 			{
-				TypeDeclaration_Create_Part(context, typeDeclaration, typePrefixes, compositionBases, typeNameAndGenerics, sb);
+				TypeDeclaration_Create_Part(context, typeDeclaration, typePrefixes, compositionBases, partInterfaceTypes, typeNameAndGenerics, sb);
 			}
 
 			sb.Append(typePrefixes.SourceSuffix);
 
 			context.AddSource($"{typePrefixes.FilePrefix}{typeNameAndGenerics.Replace("<", "_").Replace(">", "_")}.g.cs", sb.ToString());
 		}
-		static void TypeDeclaration_Create_Usings(TypeDeclarationSyntax typeDeclaration, List<CompositionBase> compositionBases, bool isPart, StringBuilder sb)
+		static void TypeDeclaration_Create_Usings(TypeDeclarationSyntax typeDeclaration, List<CompositionBase> compositionBases, List<TypeSyntax>? partInterfaceTypes, StringBuilder sb)
 		{
 			sb.AppendLine("using System;");
 			sb.AppendLine("using System.Diagnostics.CodeAnalysis;");
-			if (isPart)
+			if (partInterfaceTypes != null)
 			{
 				foreach (var usingSyntax in typeDeclaration.SyntaxTree.GetRoot().DescendantNodesAndSelf().OfType<UsingDirectiveSyntax>())
 				{
@@ -333,7 +340,7 @@ namespace TA.Util.Composition
 				sb.Append(">, ");
 				if (
 					compositionBase.BaseTypeSymbol.GetAttributes()
-						.Any(ad => ad.AttributeClass?.Name == "CompositionPart" || ad.AttributeClass?.Name == "CompositionPartAttribute")
+						.Any(ad => ad.AttributeClass?.Name == "CompositionPartAttribute")
 				)
 				{
 					WriteCompositionInterfaceReference(sb, baseTypeReference);
@@ -534,25 +541,24 @@ namespace TA.Util.Composition
 				return;
 			emittedSymbols.Add(member);
 
-			if (member is IPropertySymbol propertySymbol)
+			switch (member)
 			{
-				TypeDeclaration_Create_Base_Member_Property(context, typeDeclaration, typePrefixes, sb, writeTypeParameter, baseTypeName, baseTypeReference, member, propertySymbol);
-			}
-			else if (member is IMethodSymbol methodSymbol)
-			{
-				TypeDeclaration_Create_Base_Member_Method(context, typeDeclaration, typePrefixes, sb, writeTypeParameter, baseTypeName, baseTypeReference, member, methodSymbol);
-			}
-			else if (member is IFieldSymbol fieldSymbol)
-			{
-				TypeDeclaration_Create_Base_Member_Field(context, typeDeclaration, typePrefixes, sb, writeTypeParameter, baseTypeName, baseTypeReference, member, fieldSymbol);
-			}
-			else if (member is IEventSymbol eventSymbol)
-			{
-				TypeDeclaration_Create_Base_Member_Event(context, typeDeclaration, typePrefixes, sb, writeTypeParameter, baseTypeName, baseTypeReference, member, eventSymbol);
-			}
-			else
-			{
-				throw new NotImplementedException();
+				case IPropertySymbol propertySymbol:
+					TypeDeclaration_Create_Base_Member_Property(context, typeDeclaration, typePrefixes, sb, writeTypeParameter, baseTypeName, baseTypeReference, member, propertySymbol);
+					break;
+				case IMethodSymbol methodSymbol:
+					TypeDeclaration_Create_Base_Member_Method(context, typeDeclaration, typePrefixes, sb, writeTypeParameter, baseTypeName, baseTypeReference, member, methodSymbol);
+					break;
+				case IFieldSymbol fieldSymbol:
+					TypeDeclaration_Create_Base_Member_Field(context, typeDeclaration, typePrefixes, sb, writeTypeParameter, baseTypeName, baseTypeReference, member, fieldSymbol);
+					break;
+				case IEventSymbol eventSymbol:
+					TypeDeclaration_Create_Base_Member_Event(context, typeDeclaration, typePrefixes, sb, writeTypeParameter, baseTypeName, baseTypeReference, member, eventSymbol);
+					break;
+				case ITypeSymbol:
+					break;
+				default:
+					throw new NotImplementedException();
 			}
 		}
 		static void TypeDeclaration_Create_Base_Member_Property(GeneratorExecutionContext context, TypeDeclarationSyntax typeDeclaration, TypePrefixes typePrefixes, StringBuilder sb, WriteTypeParameterDelegate writeTypeParameter, string baseTypeName, string baseTypeReference, ISymbol member, IPropertySymbol propertySymbol)
@@ -613,21 +619,20 @@ namespace TA.Util.Composition
 				if (param.HasExplicitDefaultValue)
 				{
 					sb.Append(" = ");
-					if (param.ExplicitDefaultValue == null)
+					switch (param.ExplicitDefaultValue)
 					{
-						sb.Append("null");
-					}
-					else if (param.ExplicitDefaultValue is bool boolValue)
-					{
-						sb.Append(boolValue.ToString().ToLower());
-					}
-					else if (param.ExplicitDefaultValue is string strValue)
-					{
-						sb.Append(SyntaxFactory.Literal(strValue).ToFullString());
-					}
-					else
-					{
-						sb.Append(param.ExplicitDefaultValue);
+						case null:
+							sb.Append("null");
+							break;
+						case bool boolValue:
+							sb.Append(boolValue.ToString().ToLower());
+							break;
+						case string strValue:
+							sb.Append(SyntaxFactory.Literal(strValue).ToFullString());
+							break;
+						default:
+							sb.Append(param.ExplicitDefaultValue);
+							break;
 					}
 				}
 			}
@@ -687,7 +692,7 @@ namespace TA.Util.Composition
 			sb.Append("\t\t");
 			if (member.IsStatic)
 			{
-				WriteCompositionAccessibility(sb, member);
+				WriteCompositionAccessibility(typeDeclaration, sb, member);
 				sb.Append("static ");
 			}
 			else if (!typeDeclaration.Keyword.IsKind(SyntaxKind.StructKeyword))
@@ -714,24 +719,35 @@ namespace TA.Util.Composition
 					}
 					else
 					{
-						WriteCompositionAccessibility(sb, member);
+						WriteCompositionAccessibility(typeDeclaration, sb, member);
 						sb.Append("new ");
 					}
 				}
 				else
 				{
-					WriteCompositionAccessibility(sb, member);
-					sb.Append("virtual ");
+					WriteCompositionAccessibility(typeDeclaration, sb, member);
+					if (member.GetAttributes().Any(ad => ad.AttributeClass?.Name == "VirtualAttribute"))
+						sb.Append("virtual ");
 				}
 			}
 			else
 			{
-				WriteCompositionAccessibility(sb, member);
+				WriteCompositionAccessibility(typeDeclaration, sb, member);
 			}
 
-			static void WriteCompositionAccessibility(StringBuilder sb, ISymbol member)
+			static void WriteCompositionAccessibility(TypeDeclarationSyntax typeDeclaration, StringBuilder sb, ISymbol member)
 			{
-				sb.Append(SyntaxFacts.GetText(member.DeclaredAccessibility));
+				if (member.GetAttributes().Any(ad => ad.AttributeClass?.Name == "PrivateAttribute"))
+					sb.Append("private");
+				else if (member.GetAttributes().Any(ad => ad.AttributeClass?.Name == "ProtectedAttribute"))
+				{
+					if (typeDeclaration.Keyword.IsKind(SyntaxKind.StructKeyword))
+						sb.Append("public");
+					else
+						sb.Append("protected");
+				}
+				else
+					sb.Append(SyntaxFacts.GetText(member.DeclaredAccessibility));
 				sb.Append(' ');
 			}
 		}
@@ -811,13 +827,17 @@ namespace TA.Util.Composition
 									sb.Append(symbol.ContainingNamespace.Name);
 									sb.Append('.');
 								}
-								if (namedTypeSymbol.ContainingSymbol is INamespaceSymbol namespaceSymbol)
-									WriteNamespaceRecursive(namedTypeSymbol);
-								else if (namedTypeSymbol.ContainingSymbol is ITypeSymbol containingTypeSymbol)
+								switch (namedTypeSymbol.ContainingSymbol)
 								{
-									TypeDeclaration_Create_Base_WriteType(sb, writeTypeParameter, containingTypeSymbol);
-									sb.Append('.');
+									case INamespaceSymbol namespaceSymbol:
+										WriteNamespaceRecursive(namedTypeSymbol);
+										break;
+									case ITypeSymbol containingTypeSymbol:
+										TypeDeclaration_Create_Base_WriteType(sb, writeTypeParameter, containingTypeSymbol);
+										sb.Append('.');
+										break;
 								}
+
 								sb.Append(namedTypeSymbol.Name);
 								if (namedTypeSymbol.IsGenericType)
 								{
@@ -929,7 +949,7 @@ namespace TA.Util.Composition
 
 						if (
 							baseTypeSymbol.TypeKind != TypeKind.Interface &&
-							baseTypeSymbol.GetAttributes().Any(ad => ad.AttributeClass?.Name == "ComposedOf" || ad.AttributeClass?.Name == "ComposedOfAttribute")
+							baseTypeSymbol.GetAttributes().Any(ad => ad.AttributeClass?.Name == "ComposedOfAttribute")
 						)
 						{
 							hasBase = true;
@@ -995,86 +1015,24 @@ namespace TA.Util.Composition
 		}
 		#endregion
 		#region composition part
-		static void TypeDeclaration_Create_Part(GeneratorExecutionContext context, TypeDeclarationSyntax typeDeclaration, TypePrefixes typePrefixes, List<CompositionBase> compositionBases, string typeNameAndGenerics, StringBuilder sb)
+		static void TypeDeclaration_Create_Part(GeneratorExecutionContext context, TypeDeclarationSyntax typeDeclaration, TypePrefixes typePrefixes, List<CompositionBase> compositionBases, List<TypeSyntax> partInterfaceTypes, string typeNameAndGenerics, StringBuilder sb)
 		{
 			var members = TypeDeclaration_Create_Part_GetMembers(context, typeDeclaration, typePrefixes);
 
 			var baseInterfaces = TypeDeclaration_Create_Part_GetBaseInterfaces(context, typeDeclaration, typePrefixes);
 
+			var baseInterfacesToWrite = baseInterfaces;
 			int angleBracketPos = typeNameAndGenerics.IndexOf('<');
 			if (typeDeclaration.TypeParameterList != null)
 			{
-				TypeDeclaration_Create_Part_NonGenericInterface(typeDeclaration.TypeParameterList, compositionBases, typeNameAndGenerics, sb, members, baseInterfaces, angleBracketPos);
+				TypeDeclaration_Create_Part_NonGenericInterface(
+					typeDeclaration.TypeParameterList, compositionBases, partInterfaceTypes, typeNameAndGenerics, sb, members, baseInterfaces, angleBracketPos,
+					out var compositionBasesDependentOnGenericParameters, out var baseInterfacesDependentOnGenericParameters);
+				compositionBases = compositionBasesDependentOnGenericParameters;
+				baseInterfacesToWrite = baseInterfacesDependentOnGenericParameters;
 			}
 
-			sb.Append("\tpublic interface ");
-			WriteCompositionInterfaceNameAndGenerics(sb, typeNameAndGenerics);
-			sb.Append(" : ");
-			if (typeDeclaration.TypeParameterList != null)
-			{
-				string typeNameWithoutGenerics = typeNameAndGenerics.Substring(0, angleBracketPos);
-				sb.Append('I');
-				sb.Append(typeNameWithoutGenerics);
-				sb.Append("Composition, ");
-			}
-			sb.Append("IComposedOf<");
-			sb.Append(typeNameAndGenerics);
-			sb.Append('>');
-			foreach (var compositionBase in compositionBases)
-			{
-				if (
-					// if type is generic
-					typeDeclaration.TypeParameterList != null &&
-					!TypeDeclaration_Create_Part_CompositionBaseIsDependentOnGenericParameters(typeDeclaration.TypeParameterList, compositionBase)
-				)
-					continue;
-
-				sb.Append(", ");
-				string baseTypeReference = compositionBase.BaseTypeSyntax.ToFullString();
-				if (compositionBase.BaseTypeSymbol.GetAttributes().Any(ad => ad.AttributeClass?.Name == "CompositionPartAttribute"))
-				{
-					WriteCompositionInterfaceReference(sb, baseTypeReference);
-				}
-				else
-				{
-					sb.Append("IComposedOf<");
-					sb.Append(baseTypeReference);
-					sb.Append('>');
-				}
-
-			}
-			foreach (var baseInterfaceMembers in baseInterfaces)
-			{
-				if (
-					// if type is generic
-					typeDeclaration.TypeParameterList != null &&
-					!TypeDeclaration_Create_Part_BaseInterfaceIsDependentOnGenericParameters(typeDeclaration.TypeParameterList, baseInterfaceMembers)
-				)
-					continue;
-
-				sb.Append(", ");
-				sb.Append(baseInterfaceMembers.TypeSyntax.ToFullString().Trim());
-			}
-			sb.AppendLine();
-
-			if (typeDeclaration.ConstraintClauses.Count > 0)
-			{
-				sb.Append(typeDeclaration.ConstraintClauses.ToFullString());
-			}
-
-			sb.AppendLine("\t{");
-
-			foreach (var member in members)
-			{
-				if (
-					typeDeclaration.TypeParameterList != null &&
-					!TypeDeclaration_Create_Part_MemberIsDependentOnGenericParameters(typeDeclaration.TypeParameterList, member)
-				)
-					continue;
-				TypeDeclaration_Create_Part_Member(sb, baseInterfaces, member);
-			}
-
-			sb.AppendLine("\t}");
+			TypeDeclaration_Create_Part_MainInterface(typeDeclaration, compositionBases, partInterfaceTypes, typeNameAndGenerics, sb, members, baseInterfaces, baseInterfacesToWrite, angleBracketPos);
 		}
 		static bool TypeDeclaration_Create_Part_IsDependentOnGenericParameters(TypeParameterListSyntax typeParameterListSyntax, string name)
 		{
@@ -1168,7 +1126,9 @@ namespace TA.Util.Composition
 
 			return baseInterfaces;
 		}
-		static void TypeDeclaration_Create_Part_NonGenericInterface(TypeParameterListSyntax typeParameterListSyntax, List<CompositionBase> compositionBases, string typeNameAndGenerics, StringBuilder sb, ImmutableArray<ISymbol> members, List<BaseInterfaceMembers> baseInterfaces, int angleBracketPos)
+		static void TypeDeclaration_Create_Part_NonGenericInterface(TypeParameterListSyntax typeParameterListSyntax, List<CompositionBase> compositionBases, 
+			List<TypeSyntax> partInterfaceTypes, string typeNameAndGenerics, StringBuilder sb, ImmutableArray<ISymbol> members, List<BaseInterfaceMembers> baseInterfaces, 
+			int angleBracketPos, out List<CompositionBase> compositionBasesDependentOnGenericParameters, out List<BaseInterfaceMembers> baseInterfacesDependentOnGenericParameters)
 		{
 			string typeNameWithoutGenerics = typeNameAndGenerics.Substring(0, angleBracketPos);
 			sb.Append("\tpublic interface I");
@@ -1176,10 +1136,14 @@ namespace TA.Util.Composition
 			sb.Append("Composition");
 
 			bool first = true;
+			compositionBasesDependentOnGenericParameters = new List<CompositionBase>();
 			foreach (var compositionBase in compositionBases)
 			{
 				if (TypeDeclaration_Create_Part_CompositionBaseIsDependentOnGenericParameters(typeParameterListSyntax, compositionBase))
+				{
+					compositionBasesDependentOnGenericParameters.Add(compositionBase);
 					continue;
+				}
 
 				first = WriteColonOrComma(sb, first);
 
@@ -1195,13 +1159,22 @@ namespace TA.Util.Composition
 					sb.Append('>');
 				}
 			}
+			baseInterfacesDependentOnGenericParameters = new List<BaseInterfaceMembers>();
 			foreach (var baseInterfaceMembers in baseInterfaces)
 			{
 				if (TypeDeclaration_Create_Part_BaseInterfaceIsDependentOnGenericParameters(typeParameterListSyntax, baseInterfaceMembers))
+				{
+					baseInterfacesDependentOnGenericParameters.Add(baseInterfaceMembers);
 					continue;
+				}
 
 				first = WriteColonOrComma(sb, first);
 				sb.Append(baseInterfaceMembers.TypeSyntax.ToFullString().Trim());
+			}
+			foreach (var partInterfaceType in partInterfaceTypes)
+			{
+				first = WriteColonOrComma(sb, first);
+				sb.Append(partInterfaceType.ToFullString().Trim());
 			}
 			sb.AppendLine();
 			sb.AppendLine("\t{");
@@ -1212,9 +1185,77 @@ namespace TA.Util.Composition
 			}
 			sb.AppendLine("\t}");
 		}
+		static void TypeDeclaration_Create_Part_MainInterface(TypeDeclarationSyntax typeDeclaration, List<CompositionBase> compositionBasesToWrite, List<TypeSyntax> partInterfaceTypes, 
+			string typeNameAndGenerics, StringBuilder sb, ImmutableArray<ISymbol> members, List<BaseInterfaceMembers> baseInterfaces, 
+			List<BaseInterfaceMembers> baseInterfacesToWrite, int angleBracketPos)
+		{
+			sb.Append("\tpublic interface ");
+			WriteCompositionInterfaceNameAndGenerics(sb, typeNameAndGenerics);
+			sb.Append(" : ");
+			if (typeDeclaration.TypeParameterList != null)
+			{
+				string typeNameWithoutGenerics = typeNameAndGenerics.Substring(0, angleBracketPos);
+				sb.Append('I');
+				sb.Append(typeNameWithoutGenerics);
+				sb.Append("Composition, ");
+			}
+			sb.Append("IComposedOf<");
+			sb.Append(typeNameAndGenerics);
+			sb.Append('>');
+			foreach (var compositionBase in compositionBasesToWrite)
+			{
+				sb.Append(", ");
+				string baseTypeReference = compositionBase.BaseTypeSyntax.ToFullString();
+				if (compositionBase.BaseTypeSymbol.GetAttributes().Any(ad => ad.AttributeClass?.Name == "CompositionPartAttribute"))
+				{
+					WriteCompositionInterfaceReference(sb, baseTypeReference);
+				}
+				else
+				{
+					sb.Append("IComposedOf<");
+					sb.Append(baseTypeReference);
+					sb.Append('>');
+				}
+
+			}
+			foreach (var baseInterfaceMembers in baseInterfacesToWrite)
+			{
+				sb.Append(", ");
+				sb.Append(baseInterfaceMembers.TypeSyntax.ToFullString().Trim());
+			}
+			if (typeDeclaration.TypeParameterList == null)
+			{
+				foreach (var partInterfaceType in partInterfaceTypes)
+				{
+					sb.Append(", ");
+					sb.Append(partInterfaceType.ToFullString().Trim());
+				}
+			}
+			sb.AppendLine();
+
+			if (typeDeclaration.ConstraintClauses.Count > 0)
+			{
+				sb.Append(typeDeclaration.ConstraintClauses.ToFullString());
+			}
+
+			sb.AppendLine("\t{");
+
+			foreach (var member in members)
+			{
+				if (
+					typeDeclaration.TypeParameterList != null &&
+					!TypeDeclaration_Create_Part_MemberIsDependentOnGenericParameters(typeDeclaration.TypeParameterList, member)
+				)
+					continue;
+				TypeDeclaration_Create_Part_Member(sb, baseInterfaces, member);
+			}
+
+			sb.AppendLine("\t}");
+		}
 		static void TypeDeclaration_Create_Part_Member(StringBuilder sb, List<BaseInterfaceMembers> baseInterfaces, ISymbol member)
 		{
 			if (member.DeclaredAccessibility != Accessibility.Public) return;
+			if (member.GetAttributes().Any(ad => ad.AttributeClass?.Name == "ProtectedAttribute" || ad.AttributeClass?.Name == "PrivateAttribute")) return;
 			if (member.IsStatic) return;
 			foreach (var baseInterface in baseInterfaces)
 			{
@@ -1230,25 +1271,24 @@ namespace TA.Util.Composition
 				}
 			}
 
-			if (member is IPropertySymbol propertySymbol)
+			switch (member)
 			{
-				TypeDeclaration_Create_Part_Member_Property(sb, member, propertySymbol);
-			}
-			else if (member is IMethodSymbol methodSymbol)
-			{
-				TypeDeclaration_Create_Part_Member_Method(sb, member, methodSymbol);
-			}
-			else if (member is IFieldSymbol fieldSymbol)
-			{
-				TypeDeclaration_Create_Part_Member_Field(sb, member, fieldSymbol);
-			}
-			else if (member is IEventSymbol eventSymbol)
-			{
-				TypeDeclaration_Create_Part_Member_Event(sb, member, eventSymbol);
-			}
-			else
-			{
-				throw new NotImplementedException();
+				case IPropertySymbol propertySymbol:
+					TypeDeclaration_Create_Part_Member_Property(sb, member, propertySymbol);
+					break;
+				case IMethodSymbol methodSymbol:
+					TypeDeclaration_Create_Part_Member_Method(sb, member, methodSymbol);
+					break;
+				case IFieldSymbol fieldSymbol:
+					TypeDeclaration_Create_Part_Member_Field(sb, member, fieldSymbol);
+					break;
+				case IEventSymbol eventSymbol:
+					TypeDeclaration_Create_Part_Member_Event(sb, member, eventSymbol);
+					break;
+				case ITypeSymbol:
+					break;
+				default:
+					throw new NotImplementedException();
 			}
 		}
 		static void TypeDeclaration_Create_Part_Member_Property(StringBuilder sb, ISymbol member, IPropertySymbol propertySymbol)
