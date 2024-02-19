@@ -731,7 +731,23 @@ namespace TA.SourceGenerators.Composition
 				}
 				if (foundBaseMember != null)
 				{
-					if (foundBaseMember.IsVirtual || foundBaseMember.IsOverride)
+					bool useOverride = foundBaseMember.IsVirtual || foundBaseMember.IsOverride;
+					if (useOverride)
+					{
+						switch (member)
+						{
+							case IMethodSymbol method:
+								useOverride = method.ReturnType.ToDisplayString() == ((IMethodSymbol)foundBaseMember).ReturnType.ToDisplayString();
+								break;
+							case IPropertySymbol property:
+								useOverride = property.Type.ToDisplayString() == ((IPropertySymbol)foundBaseMember).Type.ToDisplayString();
+								break;
+							case IEventSymbol eventSymbol:
+								useOverride = eventSymbol.Type.ToDisplayString() == ((IEventSymbol)foundBaseMember).Type.ToDisplayString();
+								break;
+						}
+					}
+					if (useOverride)
 					{
 						sb.Append(SyntaxFacts.GetText(foundBaseMember.DeclaredAccessibility));
 						sb.Append(' ');
@@ -777,27 +793,20 @@ namespace TA.SourceGenerators.Composition
 			foreach (var baseMember in baseMembers)
 			{
 				if (baseMember.Kind != member.Kind) continue;
-				switch (member)
+				if (member is IMethodSymbol methodSymbol)
 				{
-					case IMethodSymbol methodSymbol:
-						if (baseMember is not IMethodSymbol baseMethodSymbol) continue;
-						if (methodSymbol.ReturnType.ToDisplayString() != baseMethodSymbol.ReturnType.ToDisplayString()) continue;
-						if (methodSymbol.Parameters.Length != baseMethodSymbol.Parameters.Length) continue;
-						bool parametersMatch = true;
-						for (int i = 0; i < methodSymbol.Parameters.Length; ++i)
+					if (baseMember is not IMethodSymbol baseMethodSymbol) continue;
+					if (methodSymbol.Parameters.Length != baseMethodSymbol.Parameters.Length) continue;
+					bool parametersMatch = true;
+					for (int i = 0; i < methodSymbol.Parameters.Length; ++i)
+					{
+						if (methodSymbol.Parameters[i].Type.ToDisplayString() != baseMethodSymbol.Parameters[i].Type.ToDisplayString())
 						{
-							if (methodSymbol.Parameters[i].Type.ToDisplayString() != baseMethodSymbol.Parameters[i].Type.ToDisplayString())
-							{
-								parametersMatch = false;
-								break;
-							}
+							parametersMatch = false;
+							break;
 						}
-						if (!parametersMatch) continue;
-						break;
-					case IPropertySymbol propertySymbol:
-						if (baseMember is not IPropertySymbol basePropertySymbol) continue;
-						if (propertySymbol.Type.ToDisplayString() != basePropertySymbol.Type.ToDisplayString()) continue;
-						break;
+					}
+					if (!parametersMatch) continue;
 				}
 
 				return baseMember;
