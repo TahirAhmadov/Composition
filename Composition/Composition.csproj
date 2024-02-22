@@ -5,12 +5,13 @@
 		<LangVersion>12.0</LangVersion>
 		<Nullable>enable</Nullable>
 		<WarningsAsErrors>Nullable;4014</WarningsAsErrors>
-		<AssemblyName>TA.Util.Composition</AssemblyName>
-		<RootNamespace>TA.Util.Composition</RootNamespace>
+		<AssemblyName>TA.SourceGenerators.Composition</AssemblyName>
+		<RootNamespace>TA.SourceGenerators.Composition</RootNamespace>
 		<Authors>TA</Authors>
 		<Company>TA</Company>
-		<Version>1.2.0.0</Version>
-		<Description>Utility</Description>
+		<Version>1.3.0.0</Version>
+		<Description>Composition-driven multiple inheritance and struct inheritance.</Description>
+		<RepositoryUrl>https://github.com/TahirAhmadov/Composition</RepositoryUrl>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<IncludeBuildOutput>false</IncludeBuildOutput>
 	</PropertyGroup>
