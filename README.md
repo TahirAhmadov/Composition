@@ -7,16 +7,16 @@ This source generator library aims to introduce a limited version of "multiple i
 Add the following to your SDK-style project file:
 ```xml
 	<ItemGroup>
-		<PackageReference Include="TA.Util.Composition" Version="1.1.0" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-		<PackageReference Include="TA.Util.CompositionTypes" Version="1.1.0" />
+		<PackageReference Include="TA.SourceGenerators.Composition" Version="1.3.0" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+		<PackageReference Include="TA.SourceGenerators.CompositionTypes" Version="1.3.0" />
 	</ItemGroup>
 ```
 
 Keep in mind that since this is `ISourceGenerator`-based, VS performance may be negatively impacted if there are many projects; it's highly not recommended to apply this using `Directory.Build.props` or any other similar mechanism; 
 it should only be added to the projects where it's needed.
 
-- https://www.nuget.org/packages/TA.Util.CompositionTypes
-- https://www.nuget.org/packages/TA.Util.Composition
+- https://www.nuget.org/packages/TA.SourceGenerators.CompositionTypes
+- https://www.nuget.org/packages/TA.SourceGenerators.Composition
 
 ## Usage
 
